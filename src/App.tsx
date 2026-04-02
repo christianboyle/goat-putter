@@ -791,14 +791,14 @@ export default function App() {
                   initial={{ opacity: 0, scale: 0.5, y: 50 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.5, y: -50 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none w-full flex justify-center px-4"
                 >
-                  <div className={`${gameState.streak >= 7 ? 'bg-red-600' : 'bg-orange-600'} text-white px-8 py-4 rounded-2xl shadow-2xl border-4 border-yellow-400 flex items-center gap-4 whitespace-nowrap`}>
-                    <span className="text-4xl">🔥</span>
-                    <span className="text-3xl font-black uppercase italic tracking-tighter">
+                  <div className={`${gameState.streak >= 7 ? 'bg-red-600' : 'bg-orange-600'} text-white px-4 py-2 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl shadow-2xl border-2 sm:border-4 border-yellow-400 flex items-center gap-2 sm:gap-4 whitespace-nowrap`}>
+                    <span className="text-2xl sm:text-4xl">🔥</span>
+                    <span className="text-xl sm:text-3xl font-black uppercase italic tracking-tighter">
                       {gameState.streak >= 7 ? "He's on Fire!" : "He's Heating Up!"}
                     </span>
-                    <span className="text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
+                    <span className="text-2xl sm:text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
                   </div>
                 </motion.div>
               )}
@@ -884,14 +884,36 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-12 left-1/2 -translate-x-1/2 pointer-events-none"
+                className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 pointer-events-none w-max max-w-[90vw]"
               >
-                <div className="bg-black/40 backdrop-blur-md px-6 py-3 rounded-full flex items-center gap-3 text-white/90 border border-white/10">
-                  <Info className="w-4 h-4" />
-                  <span className="text-sm font-medium">One shot only! Pull back to aim</span>
+                <div className="bg-black/40 backdrop-blur-md px-4 py-2 sm:px-6 sm:py-3 rounded-full flex items-center gap-2 sm:gap-3 text-white/90 border border-white/10">
+                  <Info className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="text-xs sm:text-sm font-medium">One shot only! Pull back to aim</span>
                 </div>
               </motion.div>
             )}
+
+            {/* Score Overlay */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center w-full px-4">
+              <AnimatePresence>
+                {gameState.gameOver && !gameState.isGameWon && (
+                  <motion.div
+                    initial={{ scale: 0.5, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 1.5, opacity: 0 }}
+                    className="flex flex-col items-center"
+                  >
+                    <div className="bg-white/10 backdrop-blur-md px-6 py-3 sm:px-8 sm:py-4 rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl">
+                      <h2 className="text-3xl sm:text-5xl font-black text-white italic uppercase tracking-tighter">Nice Shot!</h2>
+                      <div className="flex items-center justify-center gap-2 mt-1 sm:mt-2">
+                        <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
+                        <span className="text-xl sm:text-2xl font-bold text-white">Streak: {gameState.streak}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
       </div>
 
       {/* Win Screen Overlay */}
@@ -931,8 +953,8 @@ export default function App() {
               </div>
             )}
 
-            <div className="text-white text-center relative z-10">
-              <div className="flex justify-center gap-6 mb-12">
+            <div className="text-white text-center relative z-10 px-4">
+              <div className="flex justify-center gap-3 sm:gap-6 mb-6 sm:mb-12">
                 {[0, 1, 2].map((i) => (
                   <motion.span
                     key={`goat-top-${i}`}
@@ -947,21 +969,21 @@ export default function App() {
                       ease: "easeInOut",
                       delay: i * 0.1 
                     }}
-                    className="text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
+                    className="text-5xl sm:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
                   >
                     {streakGoal === 10 ? '👑🐐' : '🐐'}
                   </motion.span>
                 ))}
               </div>
               
-              <h1 className="text-9xl font-black italic uppercase tracking-tighter mb-2 drop-shadow-2xl leading-none">
+              <h1 className="text-5xl sm:text-9xl font-black italic uppercase tracking-tighter mb-1 sm:mb-2 drop-shadow-2xl leading-none">
                 {streakGoal === 10 ? 'ULTIMATE' : 'YOU ARE'}
               </h1>
-              <h1 className="text-9xl font-black italic uppercase tracking-tighter mb-4 drop-shadow-2xl leading-none">
+              <h1 className="text-5xl sm:text-9xl font-black italic uppercase tracking-tighter mb-2 sm:mb-4 drop-shadow-2xl leading-none">
                 {streakGoal === 10 ? 'GOAT' : 'THE GOAT'}
               </h1>
               
-              <div className="flex justify-center gap-6 mt-12">
+              <div className="flex justify-center gap-3 sm:gap-6 mt-6 sm:mt-12">
                 {[0, 1, 2].map((i) => (
                   <motion.span
                     key={`goat-bottom-${i}`}
@@ -976,7 +998,7 @@ export default function App() {
                       ease: "easeInOut",
                       delay: (i + 3) * 0.1 
                     }}
-                    className="text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
+                    className="text-5xl sm:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
                   >
                     {streakGoal === 10 ? '👑🐐' : '🐐'}
                   </motion.span>
