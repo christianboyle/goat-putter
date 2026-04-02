@@ -139,6 +139,17 @@ export default function App() {
 
   const physics = getPhysics();
 
+  // Haptics Helper
+  const triggerHaptic = useCallback((pattern: number | number[]) => {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {
+        // Ignore haptic errors
+      }
+    }
+  }, []);
+
   // Audio Synthesis
   const playSound = useCallback((type: 'hit' | 'sink' | 'win' | 'pop') => {
     if (isMuted) return;
@@ -431,6 +442,7 @@ export default function App() {
           const speed = Math.sqrt(vx * vx + vy * vy);
           if (speed < physics.sinkSpeed) {
             playSound('sink');
+            triggerHaptic([50, 30, 50]);
             const newStreak = prev.streak + 1;
             const isWin = newStreak >= streakGoal;
             triggerConfetti(prev.holePos.x, prev.holePos.y, isWin);
@@ -449,6 +461,7 @@ export default function App() {
 
         // Stop if slow or off-screen
         if ((Math.abs(vx) < physics.minVelocity && Math.abs(vy) < physics.minVelocity) || isOffScreen) {
+          if (!isOffScreen) triggerHaptic(10);
           return {
             ...prev,
             ballPos: { x, y },
@@ -718,6 +731,7 @@ export default function App() {
 
     if (dist > 10 * physics.visualScale) {
       playSound('hit');
+      triggerHaptic(20);
       setHasShotOnce(true);
       setShowToast(false);
       setGameState(prev => ({
@@ -927,23 +941,45 @@ export default function App() {
             transition={{ duration: 2, ease: "backOut" }}
             className={`absolute inset-0 flex flex-col items-center justify-center z-[100] ${
               streakGoal === 10 
-                ? 'bg-[radial-gradient(circle_at_center,_#FFD700_0%,_#DAA520_50%,_#B8860B_100%)] animate-pulse' 
+                ? 'bg-[radial-gradient(circle_at_center,_#FFD700_0%,_#DAA520_50%,_#B8860B_100%)]' 
                 : 'bg-yellow-500'
             }`}
           >
-            {/* Goat Stampede for Ultimate Win */}
+            {/* Top Goat Train (Right to Left) - ONLY FOR ULTIMATE WIN */}
             {streakGoal === 10 && (
-              <div className="absolute bottom-10 left-0 w-full overflow-hidden pointer-events-none flex gap-8">
-                {[...Array(20)].map((_, i) => (
+              <div className="absolute top-10 left-0 w-full overflow-hidden pointer-events-none flex flex-row-reverse gap-8">
+                {[...Array(15)].map((_, i) => (
                   <motion.span
-                    key={`stampede-${i}`}
-                    initial={{ x: -100 }}
-                    animate={{ x: '100vw' }}
+                    key={`goat-train-top-${i}`}
+                    initial={{ x: '100vw' }}
+                    animate={{ x: '-100vw' }}
                     transition={{ 
-                      duration: 3, 
+                      duration: 6, 
                       repeat: Infinity, 
                       ease: "linear",
-                      delay: i * 0.2 
+                      delay: i * 0.5 
+                    }}
+                    className="text-4xl sm:text-6xl"
+                  >
+                    🐐
+                  </motion.span>
+                ))}
+              </div>
+            )}
+
+            {/* Bottom Goat Train (Left to Right) - ONLY FOR ULTIMATE WIN */}
+            {streakGoal === 10 && (
+              <div className="absolute bottom-10 left-0 w-full overflow-hidden pointer-events-none flex gap-8">
+                {[...Array(15)].map((_, i) => (
+                  <motion.span
+                    key={`goat-train-bottom-${i}`}
+                    initial={{ x: '-100vw' }}
+                    animate={{ x: '100vw' }}
+                    transition={{ 
+                      duration: 6, 
+                      repeat: Infinity, 
+                      ease: "linear",
+                      delay: i * 0.5 
                     }}
                     className="text-4xl sm:text-6xl"
                   >
