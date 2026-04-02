@@ -116,8 +116,11 @@ export default function App() {
     const scale = currentDiagonal / refDiagonal;
     
     // Dampen visual scaling so it doesn't look "zoomed in" on huge screens
-    // Use a smaller exponent for more aggressive dampening
     const visualScale = Math.min(Math.pow(scale, 0.45), 1.5);
+    
+    // Physics scaling: ensure mobile (small scale) still has enough power
+    // We use a floor for the physics scale to prevent it from becoming too weak
+    const physicsScale = Math.max(scale, 0.7);
     
     return {
       scale,
@@ -125,11 +128,12 @@ export default function App() {
       ballRadius: BASE_BALL_RADIUS * visualScale,
       holeRadius: BASE_HOLE_RADIUS * visualScale,
       minVelocity: BASE_MIN_VELOCITY * scale,
-      powerMultiplier: BASE_POWER_MULTIPLIER * scale,
-      maxPower: BASE_MAX_POWER * scale,
+      powerMultiplier: BASE_POWER_MULTIPLIER * physicsScale,
+      maxPower: BASE_MAX_POWER * physicsScale,
       // Sink speed needs to be very generous on large screens because velocities are higher
       sinkSpeed: BASE_SINK_SPEED * scale * 1.5, 
       margin: Math.min(width, height) * 0.12,
+      topPadding: 100, // Extra padding for top UI
     };
   }, [dimensions]);
 
@@ -228,13 +232,11 @@ export default function App() {
 
   // Initialize level
   const initLevel = useCallback((level: number, width: number, height: number, streak: number = 0) => {
-    const currentDiagonal = Math.sqrt(width ** 2 + height ** 2);
-    const refDiagonal = Math.sqrt(REFERENCE_WIDTH ** 2 + REFERENCE_HEIGHT ** 2);
-    const scale = currentDiagonal / refDiagonal;
     const margin = Math.min(width, height) * 0.12;
+    const topPadding = 100; // Safe area for UI
     
     const holeX = margin + Math.random() * (width - margin * 2);
-    const holeY = margin + Math.random() * (height / 3 - margin);
+    const holeY = margin + topPadding + Math.random() * (height / 3 - margin - topPadding);
     const ballX = margin + Math.random() * (width - margin * 2);
     const ballY = height - margin - Math.random() * (height / 3 - margin);
 
@@ -266,8 +268,10 @@ export default function App() {
     if (width === 0 || height === 0) return;
 
     const margin = Math.min(width, height) * 0.12;
+    const topPadding = 100; // Safe area for UI
+    
     const holeX = margin + Math.random() * (width - margin * 2);
-    const holeY = margin + Math.random() * (height / 3 - margin);
+    const holeY = margin + topPadding + Math.random() * (height / 3 - margin - topPadding);
     const ballX = margin + Math.random() * (width - margin * 2);
     const ballY = height - margin - Math.random() * (height / 3 - margin);
 
