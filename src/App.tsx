@@ -87,7 +87,9 @@ export default function App() {
   const [hasShotOnce, setHasShotOnce] = useState(false);
   const [streakGoal, setStreakGoal] = useState(10);
   const [showGoalSelector, setShowGoalSelector] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const noisePatternRef = useRef<CanvasPattern | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const theme = THEME;
 
@@ -132,6 +134,77 @@ export default function App() {
   }, [dimensions]);
 
   const physics = getPhysics();
+
+  // Audio Synthesis
+  const playSound = useCallback((type: 'hit' | 'sink' | 'win' | 'pop') => {
+    if (isMuted) return;
+    
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    masterGain.connect(ctx.destination);
+
+    if (type === 'hit') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } else if (type === 'sink') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.8, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'win') {
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1);
+        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.1 + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.4);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(ctx.currentTime + i * 0.1);
+        osc.stop(ctx.currentTime + i * 0.1 + 0.5);
+      });
+    } else if (type === 'pop') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    }
+  }, [isMuted]);
 
   // Toast trigger for streak
   useEffect(() => {
@@ -241,8 +314,10 @@ export default function App() {
   // Win screen confetti effect
   useEffect(() => {
     if (gameState.isGameWon) {
+      playSound('win');
       const isUltimate = streakGoal === 10;
       const interval = setInterval(() => {
+        playSound('pop');
         // Left stream
         confetti({
           particleCount: isUltimate ? 8 : 3,
@@ -371,6 +446,7 @@ export default function App() {
         if (distToHole < physics.holeRadius) {
           const speed = Math.sqrt(vx * vx + vy * vy);
           if (speed < physics.sinkSpeed) {
+            playSound('sink');
             const newStreak = prev.streak + 1;
             const isWin = newStreak >= streakGoal;
             triggerConfetti(prev.holePos.x, prev.holePos.y, isWin);
@@ -413,7 +489,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [gameState.isMoving, gameState.gameOver, dimensions, triggerConfetti, physics]);
+  }, [gameState.isMoving, gameState.gameOver, dimensions, triggerConfetti, physics, playSound, streakGoal]);
 
   // Handle Auto-Reset (Unified for Win and Miss)
   useEffect(() => {
@@ -653,6 +729,7 @@ export default function App() {
     const angle = Math.atan2(dy, dx);
 
     if (dist > 10 * physics.visualScale) {
+      playSound('hit');
       setHasShotOnce(true);
       setGameState(prev => ({
         ...prev,
@@ -688,8 +765,134 @@ export default function App() {
 
   return (
     <div className="fixed inset-0 bg-slate-950 overflow-hidden font-sans select-none touch-none">
+      {/* Game Screen (Always Mounted) */}
+      <div className="absolute inset-0">
+        <canvas
+          ref={canvasRef}
+          width={dimensions.width}
+          height={dimensions.height}
+          onMouseDown={handleStart}
+          onMouseMove={handleMove}
+          onMouseUp={handleEnd}
+          onTouchStart={handleStart}
+          onTouchMove={handleMove}
+          onTouchEnd={handleEnd}
+          className="block w-full h-full cursor-crosshair"
+        />
+
+            {/* Toast Notification */}
+            <AnimatePresence>
+              {showToast && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5, y: 50 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.5, y: -50 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
+                >
+                  <div className={`${gameState.streak >= 7 ? 'bg-red-600' : 'bg-orange-600'} text-white px-8 py-4 rounded-2xl shadow-2xl border-4 border-yellow-400 flex items-center gap-4 whitespace-nowrap`}>
+                    <span className="text-4xl">🔥</span>
+                    <span className="text-3xl font-black uppercase italic tracking-tighter">
+                      {gameState.streak >= 7 ? "He's on Fire!" : "He's Heating Up!"}
+                    </span>
+                    <span className="text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* UI Overlay */}
+            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
+              <div className="flex flex-col gap-1">
+                <div className={`flex items-center gap-2 ${theme.textColor} font-bold text-2xl tracking-tight`}>
+                  <Flag className="w-6 h-6" />
+                  <span>Hole {gameState.level}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className={`${theme.textColor} opacity-70 font-medium`}>
+                    Total Sunk: <span className="opacity-100 font-bold">{gameState.totalScore}</span>
+                  </div>
+                  <div className={`${theme.textColor} opacity-70 font-medium`}>
+                    Goal: <span className="opacity-100 font-bold">{streakGoal}</span>
+                  </div>
+                  {gameState.streak > 1 && (
+                    <div className="bg-orange-500 px-3 py-0.5 rounded-full text-xs font-black text-white animate-pulse uppercase tracking-wider">
+                      {gameState.streak}x Streak
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pointer-events-auto">
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 border border-white/10"
+                  title={isMuted ? "Unmute" : "Mute"}
+                >
+                  {isMuted ? <Music className="w-4 h-4 opacity-50" /> : <Music className="w-4 h-4" />}
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGoalSelector(!showGoalSelector)}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 flex items-center gap-2 border border-white/10"
+                    title="Set Streak Goal"
+                  >
+                    <Trophy className={`w-4 h-4 ${streakGoal >= 7 ? 'text-yellow-400' : 'text-slate-300'}`} />
+                    <span className="text-xs font-black uppercase tracking-widest">Goal: {streakGoal}</span>
+                  </button>
+                  
+                  <AnimatePresence>
+                    {showGoalSelector && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute top-full right-0 mt-2 p-4 bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl z-[110] w-48"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Streak Goal</span>
+                            <span className="text-sm font-bold text-yellow-400">{streakGoal}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="2"
+                            max="10"
+                            step="1"
+                            value={streakGoal}
+                            onChange={(e) => setStreakGoal(parseInt(e.target.value))}
+                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                          />
+                          <div className="flex justify-between text-[8px] font-bold text-white/30 uppercase">
+                            <span>2</span>
+                            <span>10</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            {!hasShotOnce && !gameState.isMoving && !gameState.gameOver && gameState.strokes === 0 && !gameState.isResetting && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute bottom-12 left-1/2 -translate-x-1/2 pointer-events-none"
+              >
+                <div className="bg-black/40 backdrop-blur-md px-6 py-3 rounded-full flex items-center gap-3 text-white/90 border border-white/10">
+                  <Info className="w-4 h-4" />
+                  <span className="text-sm font-medium">One shot only! Pull back to aim</span>
+                </div>
+              </motion.div>
+            )}
+      </div>
+
+      {/* Win Screen Overlay */}
       <AnimatePresence>
-        {gameState.isGameWon ? (
+        {gameState.isGameWon && (
           <motion.div
             key="win-screen"
             initial={{ rotateY: 0, scale: 0.5, opacity: 0 }}
@@ -776,129 +979,6 @@ export default function App() {
                 ))}
               </div>
             </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="game-screen"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0"
-          >
-            <canvas
-              key={`canvas-${gameState.level}-${gameState.isGameWon}`}
-              ref={canvasRef}
-              width={dimensions.width}
-              height={dimensions.height}
-              onMouseDown={handleStart}
-              onMouseMove={handleMove}
-              onMouseUp={handleEnd}
-              onTouchStart={handleStart}
-              onTouchMove={handleMove}
-              onTouchEnd={handleEnd}
-              className="block w-full h-full cursor-crosshair"
-            />
-
-            {/* Toast Notification */}
-            <AnimatePresence>
-              {showToast && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.5, y: 50 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.5, y: -50 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
-                >
-                  <div className={`${gameState.streak >= 7 ? 'bg-red-600' : 'bg-orange-600'} text-white px-8 py-4 rounded-2xl shadow-2xl border-4 border-yellow-400 flex items-center gap-4 whitespace-nowrap`}>
-                    <span className="text-4xl">🔥</span>
-                    <span className="text-3xl font-black uppercase italic tracking-tighter">
-                      {gameState.streak >= 7 ? "He's on Fire!" : "He's Heating Up!"}
-                    </span>
-                    <span className="text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* UI Overlay */}
-            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
-              <div className="flex flex-col gap-1">
-                <div className={`flex items-center gap-2 ${theme.textColor} font-bold text-2xl tracking-tight`}>
-                  <Flag className="w-6 h-6" />
-                  <span>Hole {gameState.level}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className={`${theme.textColor} opacity-70 font-medium`}>
-                    Total Sunk: <span className="opacity-100 font-bold">{gameState.totalScore}</span>
-                  </div>
-                  <div className={`${theme.textColor} opacity-70 font-medium`}>
-                    Goal: <span className="opacity-100 font-bold">{streakGoal}</span>
-                  </div>
-                  {gameState.streak > 1 && (
-                    <div className="bg-orange-500 px-3 py-0.5 rounded-full text-xs font-black text-white animate-pulse uppercase tracking-wider">
-                      {gameState.streak}x Streak
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pointer-events-auto">
-                <div className="relative">
-                  <button
-                    onClick={() => setShowGoalSelector(!showGoalSelector)}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 flex items-center gap-2 border border-white/10"
-                    title="Set Streak Goal"
-                  >
-                    <Trophy className={`w-4 h-4 ${streakGoal >= 7 ? 'text-yellow-400' : 'text-slate-300'}`} />
-                    <span className="text-xs font-black uppercase tracking-widest">Goal: {streakGoal}</span>
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showGoalSelector && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute top-full right-0 mt-2 p-4 bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl z-[110] w-48"
-                      >
-                        <div className="flex flex-col gap-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Streak Goal</span>
-                            <span className="text-sm font-bold text-yellow-400">{streakGoal}</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="2"
-                            max="10"
-                            step="1"
-                            value={streakGoal}
-                            onChange={(e) => setStreakGoal(parseInt(e.target.value))}
-                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-400"
-                          />
-                          <div className="flex justify-between text-[8px] font-bold text-white/30 uppercase">
-                            <span>2</span>
-                            <span>10</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            {!hasShotOnce && !gameState.isMoving && !gameState.gameOver && gameState.strokes === 0 && !gameState.isResetting && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-12 left-1/2 -translate-x-1/2 pointer-events-none"
-              >
-                <div className="bg-black/40 backdrop-blur-md px-6 py-3 rounded-full flex items-center gap-3 text-white/90 border border-white/10">
-                  <Info className="w-4 h-4" />
-                  <span className="text-sm font-medium">One shot only! Pull back to aim</span>
-                </div>
-              </motion.div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
