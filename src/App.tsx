@@ -10,12 +10,16 @@ import confetti from 'canvas-confetti';
 
 // Constants
 const FRICTION = 0.985;
-const BALL_RADIUS = 8;
-const HOLE_RADIUS = 15;
-const MIN_VELOCITY = 0.1;
-const POWER_MULTIPLIER = 0.15;
-const MAX_POWER = 150;
 const RESET_DELAY = 300;
+
+// Base physics values (will be scaled)
+const BASE_BALL_RADIUS = 8;
+const BASE_HOLE_RADIUS = 15;
+const BASE_MIN_VELOCITY = 0.1;
+const BASE_POWER_MULTIPLIER = 0.15;
+const BASE_MAX_POWER = 150;
+const BASE_SINK_SPEED = 8;
+const BASE_DIAGONAL = 1200;
 
 // Theme Configuration
 const THEME = {
@@ -86,6 +90,38 @@ export default function App() {
 
   const theme = THEME;
 
+  // Dynamic physics scaling
+  const getPhysics = useCallback(() => {
+    const { width, height } = dimensions;
+    if (width === 0 || height === 0) {
+      return {
+        scale: 1,
+        ballRadius: BASE_BALL_RADIUS,
+        holeRadius: BASE_HOLE_RADIUS,
+        minVelocity: BASE_MIN_VELOCITY,
+        powerMultiplier: BASE_POWER_MULTIPLIER,
+        maxPower: BASE_MAX_POWER,
+        sinkSpeed: BASE_SINK_SPEED,
+        margin: 100,
+      };
+    }
+    const currentDiagonal = Math.sqrt(width ** 2 + height ** 2);
+    const scale = currentDiagonal / BASE_DIAGONAL;
+    
+    return {
+      scale,
+      ballRadius: BASE_BALL_RADIUS * scale,
+      holeRadius: BASE_HOLE_RADIUS * scale,
+      minVelocity: BASE_MIN_VELOCITY * scale,
+      powerMultiplier: BASE_POWER_MULTIPLIER * scale,
+      maxPower: BASE_MAX_POWER * scale,
+      sinkSpeed: BASE_SINK_SPEED * scale,
+      margin: Math.min(width, height) * 0.15,
+    };
+  }, [dimensions]);
+
+  const physics = getPhysics();
+
   // Toast trigger for streak
   useEffect(() => {
     if (gameState.streak === 3 || gameState.streak === 7) {
@@ -108,7 +144,10 @@ export default function App() {
 
   // Initialize level
   const initLevel = useCallback((level: number, width: number, height: number, streak: number = 0) => {
-    const margin = 100;
+    const currentDiagonal = Math.sqrt(width ** 2 + height ** 2);
+    const scale = currentDiagonal / BASE_DIAGONAL;
+    const margin = Math.min(width, height) * 0.15;
+    
     const holeX = margin + Math.random() * (width - margin * 2);
     const holeY = margin + Math.random() * (height / 3 - margin);
     const ballX = margin + Math.random() * (width - margin * 2);
@@ -136,12 +175,12 @@ export default function App() {
   }, []);
 
   const resetEntireGame = useCallback(() => {
-    const margin = 100;
     const { width, height } = dimensions;
     
     // Ensure we have valid dimensions
     if (width === 0 || height === 0) return;
 
+    const margin = Math.min(width, height) * 0.15;
     const holeX = margin + Math.random() * (width - margin * 2);
     const holeY = margin + Math.random() * (height / 3 - margin);
     const ballX = margin + Math.random() * (width - margin * 2);
@@ -307,9 +346,9 @@ export default function App() {
           distToHole = Math.sqrt(Math.pow(prev.holePos.x - closestX, 2) + Math.pow(prev.holePos.y - closestY, 2));
         }
 
-        if (distToHole < HOLE_RADIUS) {
+        if (distToHole < physics.holeRadius) {
           const speed = Math.sqrt(vx * vx + vy * vy);
-          if (speed < 8) {
+          if (speed < physics.sinkSpeed) {
             const newStreak = prev.streak + 1;
             const isWin = newStreak >= streakGoal;
             triggerConfetti(prev.holePos.x, prev.holePos.y, isWin);
@@ -327,7 +366,7 @@ export default function App() {
         }
 
         // Stop if slow or off-screen
-        if ((Math.abs(vx) < MIN_VELOCITY && Math.abs(vy) < MIN_VELOCITY) || isOffScreen) {
+        if ((Math.abs(vx) < physics.minVelocity && Math.abs(vy) < physics.minVelocity) || isOffScreen) {
           return {
             ...prev,
             ballPos: { x, y },
@@ -352,7 +391,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [gameState.isMoving, gameState.gameOver, dimensions, triggerConfetti]);
+  }, [gameState.isMoving, gameState.gameOver, dimensions, triggerConfetti, physics]);
 
   // Handle Auto-Reset (Unified for Win and Miss)
   useEffect(() => {
@@ -437,7 +476,7 @@ export default function App() {
 
     // Draw Hole
     ctx.beginPath();
-    ctx.arc(gameState.holePos.x, gameState.holePos.y, HOLE_RADIUS, 0, Math.PI * 2);
+    ctx.arc(gameState.holePos.x, gameState.holePos.y, physics.holeRadius, 0, Math.PI * 2);
     ctx.fillStyle = theme.holeColor;
     ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
@@ -447,15 +486,15 @@ export default function App() {
     // Draw Flag
     ctx.beginPath();
     ctx.moveTo(gameState.holePos.x, gameState.holePos.y);
-    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 40);
+    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.scale);
     ctx.strokeStyle = theme.pinColor;
     ctx.lineWidth = 2;
     ctx.stroke();
     
     ctx.beginPath();
-    ctx.moveTo(gameState.holePos.x, gameState.holePos.y - 40);
-    ctx.lineTo(gameState.holePos.x + 15, gameState.holePos.y - 32);
-    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 25);
+    ctx.moveTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.scale);
+    ctx.lineTo(gameState.holePos.x + 15 * physics.scale, gameState.holePos.y - 32 * physics.scale);
+    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 25 * physics.scale);
     ctx.fillStyle = theme.flagColor;
     ctx.fill();
 
@@ -463,7 +502,7 @@ export default function App() {
     if (gameState.isDragging && gameState.dragStart && gameState.dragCurrent) {
       const dx = gameState.dragStart.x - gameState.dragCurrent.x;
       const dy = gameState.dragStart.y - gameState.dragCurrent.y;
-      const dist = Math.min(Math.sqrt(dx * dx + dy * dy), MAX_POWER);
+      const dist = Math.min(Math.sqrt(dx * dx + dy * dy), physics.maxPower);
       const angle = Math.atan2(dy, dx);
 
       ctx.beginPath();
@@ -472,7 +511,7 @@ export default function App() {
         gameState.ballPos.x + Math.cos(angle) * dist,
         gameState.ballPos.y + Math.sin(angle) * dist
       );
-      ctx.strokeStyle = `rgba(255, 255, 255, ${dist / MAX_POWER})`;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${dist / physics.maxPower})`;
       ctx.setLineDash([5, 5]);
       ctx.lineWidth = 3;
       ctx.stroke();
@@ -482,11 +521,11 @@ export default function App() {
     // Draw Trail
     if (gameState.trail.length > 1) {
       const speed = Math.sqrt(gameState.ballVel.x ** 2 + gameState.ballVel.y ** 2);
-      const baseWidth = BALL_RADIUS * (1 + speed * 0.05);
+      const baseWidth = physics.ballRadius * (1 + speed * (0.05 / physics.scale));
 
       // Glow effect
       ctx.save();
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 15 * physics.scale;
       ctx.shadowColor = theme.ballColor;
       
       ctx.beginPath();
@@ -521,11 +560,11 @@ export default function App() {
     if (!gameState.gameOver) {
       // Fire effect for streaks
       if (gameState.streak > 1) {
-        let fireScale = gameState.streak * 8;
+        let fireScale = gameState.streak * 8 * physics.scale;
         if (gameState.streak > 5) {
-          fireScale = 84 * Math.pow(2, gameState.streak - 5);
+          fireScale = 84 * Math.pow(2, gameState.streak - 5) * physics.scale;
         } else if (gameState.streak > 3) {
-          fireScale = 24 + (gameState.streak - 3) * 30;
+          fireScale = (24 + (gameState.streak - 3) * 30) * physics.scale;
         }
         
         const particleCount = Math.min(12 + gameState.streak * 4, 100);
@@ -533,28 +572,28 @@ export default function App() {
         
         for (let i = 0; i < particleCount; i++) {
           const angle = (i / particleCount) * Math.PI * 2 + time;
-          const flicker = Math.sin(time * 2 + i) * 5;
-          const offsetX = Math.cos(angle) * (BALL_RADIUS + Math.random() * fireScale + flicker);
-          const offsetY = Math.sin(angle) * (BALL_RADIUS + Math.random() * fireScale + flicker);
+          const flicker = Math.sin(time * 2 + i) * 5 * physics.scale;
+          const offsetX = Math.cos(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
+          const offsetY = Math.sin(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
           
           ctx.beginPath();
-          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, 3 + Math.random() * 5, 0, Math.PI * 2);
+          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, (3 + Math.random() * 5) * physics.scale, 0, Math.PI * 2);
           ctx.fillStyle = theme.fireColors[i % theme.fireColors.length];
           ctx.fill();
         }
       }
 
       ctx.beginPath();
-      ctx.arc(gameState.ballPos.x, gameState.ballPos.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.arc(gameState.ballPos.x, gameState.ballPos.y, physics.ballRadius, 0, Math.PI * 2);
       ctx.fillStyle = theme.ballColor;
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 5 * physics.scale;
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.fill();
       ctx.shadowBlur = 0;
     }
 
     ctx.restore();
-  }, [gameState, dimensions, tick, theme]);
+  }, [gameState, dimensions, tick, theme, physics]);
 
   // Input Handlers
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -588,10 +627,10 @@ export default function App() {
 
     const dx = gameState.dragStart.x - gameState.dragCurrent.x;
     const dy = gameState.dragStart.y - gameState.dragCurrent.y;
-    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), MAX_POWER);
+    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), physics.maxPower);
     const angle = Math.atan2(dy, dx);
 
-    if (dist > 10) {
+    if (dist > 10 * physics.scale) {
       setHasShotOnce(true);
       setGameState(prev => ({
         ...prev,
@@ -600,8 +639,8 @@ export default function App() {
         dragStart: null,
         dragCurrent: null,
         ballVel: {
-          x: Math.cos(angle) * dist * POWER_MULTIPLIER,
-          y: Math.sin(angle) * dist * POWER_MULTIPLIER,
+          x: Math.cos(angle) * dist * physics.powerMultiplier,
+          y: Math.sin(angle) * dist * physics.powerMultiplier,
         },
         strokes: 1,
         trail: [],
