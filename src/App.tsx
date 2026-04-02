@@ -14,12 +14,13 @@ const RESET_DELAY = 300;
 
 // Base physics values (will be scaled)
 const BASE_BALL_RADIUS = 8;
-const BASE_HOLE_RADIUS = 15;
+const BASE_HOLE_RADIUS = 18;
 const BASE_MIN_VELOCITY = 0.1;
 const BASE_POWER_MULTIPLIER = 0.15;
 const BASE_MAX_POWER = 150;
-const BASE_SINK_SPEED = 8;
-const BASE_DIAGONAL = 1200;
+const BASE_SINK_SPEED = 10;
+const REFERENCE_WIDTH = 1600; // Reference width for scaling
+const REFERENCE_HEIGHT = 900; // Reference height for scaling
 
 // Theme Configuration
 const THEME = {
@@ -96,6 +97,7 @@ export default function App() {
     if (width === 0 || height === 0) {
       return {
         scale: 1,
+        visualScale: 1,
         ballRadius: BASE_BALL_RADIUS,
         holeRadius: BASE_HOLE_RADIUS,
         minVelocity: BASE_MIN_VELOCITY,
@@ -105,18 +107,27 @@ export default function App() {
         margin: 100,
       };
     }
+    
+    // Calculate scale based on area/diagonal relative to a standard 1080p-ish screen
     const currentDiagonal = Math.sqrt(width ** 2 + height ** 2);
-    const scale = currentDiagonal / BASE_DIAGONAL;
+    const refDiagonal = Math.sqrt(REFERENCE_WIDTH ** 2 + REFERENCE_HEIGHT ** 2);
+    const scale = currentDiagonal / refDiagonal;
+    
+    // Dampen visual scaling so it doesn't look "zoomed in" on huge screens
+    // Use a smaller exponent for more aggressive dampening
+    const visualScale = Math.min(Math.pow(scale, 0.45), 1.5);
     
     return {
       scale,
-      ballRadius: BASE_BALL_RADIUS * scale,
-      holeRadius: BASE_HOLE_RADIUS * scale,
+      visualScale,
+      ballRadius: BASE_BALL_RADIUS * visualScale,
+      holeRadius: BASE_HOLE_RADIUS * visualScale,
       minVelocity: BASE_MIN_VELOCITY * scale,
       powerMultiplier: BASE_POWER_MULTIPLIER * scale,
       maxPower: BASE_MAX_POWER * scale,
-      sinkSpeed: BASE_SINK_SPEED * scale,
-      margin: Math.min(width, height) * 0.15,
+      // Sink speed needs to be very generous on large screens because velocities are higher
+      sinkSpeed: BASE_SINK_SPEED * scale * 1.5, 
+      margin: Math.min(width, height) * 0.12,
     };
   }, [dimensions]);
 
@@ -145,8 +156,9 @@ export default function App() {
   // Initialize level
   const initLevel = useCallback((level: number, width: number, height: number, streak: number = 0) => {
     const currentDiagonal = Math.sqrt(width ** 2 + height ** 2);
-    const scale = currentDiagonal / BASE_DIAGONAL;
-    const margin = Math.min(width, height) * 0.15;
+    const refDiagonal = Math.sqrt(REFERENCE_WIDTH ** 2 + REFERENCE_HEIGHT ** 2);
+    const scale = currentDiagonal / refDiagonal;
+    const margin = Math.min(width, height) * 0.12;
     
     const holeX = margin + Math.random() * (width - margin * 2);
     const holeY = margin + Math.random() * (height / 3 - margin);
@@ -180,7 +192,7 @@ export default function App() {
     // Ensure we have valid dimensions
     if (width === 0 || height === 0) return;
 
-    const margin = Math.min(width, height) * 0.15;
+    const margin = Math.min(width, height) * 0.12;
     const holeX = margin + Math.random() * (width - margin * 2);
     const holeY = margin + Math.random() * (height / 3 - margin);
     const ballX = margin + Math.random() * (width - margin * 2);
@@ -329,6 +341,16 @@ export default function App() {
         // Apply friction
         vx *= FRICTION;
         vy *= FRICTION;
+
+        // Gravity pull towards hole
+        const dxHole = prev.holePos.x - x;
+        const dyHole = prev.holePos.y - y;
+        const distHole = Math.sqrt(dxHole * dxHole + dyHole * dyHole);
+        if (distHole < physics.holeRadius * 2.5) {
+          const force = (1 - distHole / (physics.holeRadius * 2.5)) * 0.2 * physics.scale;
+          vx += (dxHole / distHole) * force;
+          vy += (dyHole / distHole) * force;
+        }
 
         // Check if off-screen
         const isOffScreen = x < -50 || x > dimensions.width + 50 || y < -50 || y > dimensions.height + 50;
@@ -486,15 +508,15 @@ export default function App() {
     // Draw Flag
     ctx.beginPath();
     ctx.moveTo(gameState.holePos.x, gameState.holePos.y);
-    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.scale);
+    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.visualScale);
     ctx.strokeStyle = theme.pinColor;
     ctx.lineWidth = 2;
     ctx.stroke();
     
     ctx.beginPath();
-    ctx.moveTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.scale);
-    ctx.lineTo(gameState.holePos.x + 15 * physics.scale, gameState.holePos.y - 32 * physics.scale);
-    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 25 * physics.scale);
+    ctx.moveTo(gameState.holePos.x, gameState.holePos.y - 40 * physics.visualScale);
+    ctx.lineTo(gameState.holePos.x + 15 * physics.visualScale, gameState.holePos.y - 32 * physics.visualScale);
+    ctx.lineTo(gameState.holePos.x, gameState.holePos.y - 25 * physics.visualScale);
     ctx.fillStyle = theme.flagColor;
     ctx.fill();
 
@@ -521,11 +543,11 @@ export default function App() {
     // Draw Trail
     if (gameState.trail.length > 1) {
       const speed = Math.sqrt(gameState.ballVel.x ** 2 + gameState.ballVel.y ** 2);
-      const baseWidth = physics.ballRadius * (1 + speed * (0.05 / physics.scale));
+      const baseWidth = physics.ballRadius * (1 + speed * (0.05 / physics.visualScale));
 
       // Glow effect
       ctx.save();
-      ctx.shadowBlur = 15 * physics.scale;
+      ctx.shadowBlur = 15 * physics.visualScale;
       ctx.shadowColor = theme.ballColor;
       
       ctx.beginPath();
@@ -560,11 +582,11 @@ export default function App() {
     if (!gameState.gameOver) {
       // Fire effect for streaks
       if (gameState.streak > 1) {
-        let fireScale = gameState.streak * 8 * physics.scale;
+        let fireScale = gameState.streak * 8 * physics.visualScale;
         if (gameState.streak > 5) {
-          fireScale = 84 * Math.pow(2, gameState.streak - 5) * physics.scale;
+          fireScale = 84 * Math.pow(2, gameState.streak - 5) * physics.visualScale;
         } else if (gameState.streak > 3) {
-          fireScale = (24 + (gameState.streak - 3) * 30) * physics.scale;
+          fireScale = (24 + (gameState.streak - 3) * 30) * physics.visualScale;
         }
         
         const particleCount = Math.min(12 + gameState.streak * 4, 100);
@@ -572,12 +594,12 @@ export default function App() {
         
         for (let i = 0; i < particleCount; i++) {
           const angle = (i / particleCount) * Math.PI * 2 + time;
-          const flicker = Math.sin(time * 2 + i) * 5 * physics.scale;
+          const flicker = Math.sin(time * 2 + i) * 5 * physics.visualScale;
           const offsetX = Math.cos(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
           const offsetY = Math.sin(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
           
           ctx.beginPath();
-          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, (3 + Math.random() * 5) * physics.scale, 0, Math.PI * 2);
+          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, (3 + Math.random() * 5) * physics.visualScale, 0, Math.PI * 2);
           ctx.fillStyle = theme.fireColors[i % theme.fireColors.length];
           ctx.fill();
         }
@@ -586,7 +608,7 @@ export default function App() {
       ctx.beginPath();
       ctx.arc(gameState.ballPos.x, gameState.ballPos.y, physics.ballRadius, 0, Math.PI * 2);
       ctx.fillStyle = theme.ballColor;
-      ctx.shadowBlur = 5 * physics.scale;
+      ctx.shadowBlur = 5 * physics.visualScale;
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -630,7 +652,7 @@ export default function App() {
     const dist = Math.min(Math.sqrt(dx * dx + dy * dy), physics.maxPower);
     const angle = Math.atan2(dy, dx);
 
-    if (dist > 10 * physics.scale) {
+    if (dist > 10 * physics.visualScale) {
       setHasShotOnce(true);
       setGameState(prev => ({
         ...prev,
