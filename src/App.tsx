@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, RotateCcw, Flag, Info, AlertCircle, Palette, Sun, Music } from 'lucide-react';
+import { Trophy, RotateCcw, Flag, Info, AlertCircle, Palette, Sun, Music, Settings } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // Constants
@@ -33,7 +33,7 @@ const THEME = {
   ballColor: '#ffffff',
   confettiColors: ['#ffffff', '#ff0000', '#ffff00', '#00ff00', '#0000ff', '#ff00ff'],
   textColor: 'text-white',
-  fireColors: ['rgba(255, 60, 0, 0.7)', 'rgba(255, 150, 0, 0.5)', 'rgba(255, 220, 0, 0.3)'],
+  fireColors: ['rgba(255, 60, 0, 0.95)', 'rgba(255, 150, 0, 0.85)', 'rgba(255, 220, 0, 0.75)'],
 };
 
 interface Point {
@@ -216,6 +216,8 @@ export default function App() {
       setShowToast(true);
       const timer = setTimeout(() => setShowToast(false), 3000);
       return () => clearTimeout(timer);
+    } else {
+      setShowToast(false);
     }
   }, [gameState.streak]);
 
@@ -355,51 +357,29 @@ export default function App() {
     const relY = y / window.innerHeight;
     
     if (isMassive) {
-      const duration = 5 * 1000;
-      const animationEnd = Date.now() + duration;
-      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-
-      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
-
-      const interval: any = setInterval(function() {
-        const timeLeft = animationEnd - Date.now();
-
-        if (timeLeft <= 0) {
-          return clearInterval(interval);
-        }
-
-        const particleCount = 50 * (timeLeft / duration);
-        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, colors: theme.confettiColors });
-        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, colors: theme.confettiColors });
-      }, 250);
+      // Massive win "poof"
+      confetti({
+        particleCount: 400,
+        spread: 360,
+        origin: { x: relX, y: relY },
+        startVelocity: 60,
+        gravity: 1.2,
+        ticks: 100,
+        colors: theme.confettiColors,
+      });
       return;
     }
 
-    // Initial burst
+    // Single quick "poof" burst
     confetti({
-      particleCount: 100,
-      spread: 60,
+      particleCount: 150,
+      spread: 70,
       origin: { x: relX, y: relY },
-      startVelocity: 45,
-      gravity: 1.2,
+      startVelocity: 40,
+      gravity: 1.5,
+      ticks: 60, // Ends faster
       colors: theme.confettiColors,
     });
-
-    // Sustained volcano effect
-    let count = 0;
-    const interval = setInterval(() => {
-      confetti({
-        particleCount: 20,
-        angle: 90,
-        spread: 40,
-        origin: { x: relX, y: relY },
-        startVelocity: 35,
-        gravity: 1.5,
-        colors: theme.confettiColors,
-      });
-      count++;
-      if (count > 5) clearInterval(interval);
-    }, 150);
   }, [theme]);
 
   // Game Loop
@@ -664,22 +644,24 @@ export default function App() {
       if (gameState.streak > 1) {
         let fireScale = gameState.streak * 8 * physics.visualScale;
         if (gameState.streak > 5) {
-          fireScale = 84 * Math.pow(2, gameState.streak - 5) * physics.visualScale;
+          fireScale = Math.min(120, 84 * Math.pow(1.5, gameState.streak - 5)) * physics.visualScale;
         } else if (gameState.streak > 3) {
-          fireScale = (24 + (gameState.streak - 3) * 30) * physics.visualScale;
+          fireScale = (24 + (gameState.streak - 3) * 20) * physics.visualScale;
         }
         
-        const particleCount = Math.min(12 + gameState.streak * 4, 100);
-        const time = Date.now() / 100;
+        const particleCount = Math.min(15 + gameState.streak * 6, 120);
+        const time = Date.now() / 80;
         
         for (let i = 0; i < particleCount; i++) {
-          const angle = (i / particleCount) * Math.PI * 2 + time;
-          const flicker = Math.sin(time * 2 + i) * 5 * physics.visualScale;
-          const offsetX = Math.cos(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
-          const offsetY = Math.sin(angle) * (physics.ballRadius + Math.random() * fireScale + flicker);
+          const angle = (i / particleCount) * Math.PI * 2 + time + Math.random() * 0.5;
+          const flicker = Math.sin(time * 3 + i) * 8 * physics.visualScale;
+          const dist = (physics.ballRadius + Math.random() * fireScale + flicker);
+          const offsetX = Math.cos(angle) * dist;
+          const offsetY = Math.sin(angle) * dist;
           
+          const size = (2 + Math.random() * 6) * physics.visualScale;
           ctx.beginPath();
-          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, (3 + Math.random() * 5) * physics.visualScale, 0, Math.PI * 2);
+          ctx.arc(gameState.ballPos.x + offsetX, gameState.ballPos.y + offsetY, size, 0, Math.PI * 2);
           ctx.fillStyle = theme.fireColors[i % theme.fireColors.length];
           ctx.fill();
         }
@@ -700,6 +682,8 @@ export default function App() {
   // Input Handlers
   const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (gameState.isMoving || gameState.gameOver || gameState.isResetting || gameState.strokes > 0) return;
+    
+    setShowToast(false);
     
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
@@ -735,6 +719,7 @@ export default function App() {
     if (dist > 10 * physics.visualScale) {
       playSound('hit');
       setHasShotOnce(true);
+      setShowToast(false);
       setGameState(prev => ({
         ...prev,
         isMoving: true,
@@ -796,7 +781,7 @@ export default function App() {
                   <div className={`${gameState.streak >= 7 ? 'bg-red-600' : 'bg-orange-600'} text-white px-4 py-2 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl shadow-2xl border-2 sm:border-4 border-yellow-400 flex items-center gap-2 sm:gap-4 whitespace-nowrap`}>
                     <span className="text-2xl sm:text-4xl">🔥</span>
                     <span className="text-xl sm:text-3xl font-black uppercase italic tracking-tighter">
-                      {gameState.streak >= 7 ? "He's on Fire!" : "He's Heating Up!"}
+                      {gameState.streak >= 7 ? "YOU ARE ON FIRE" : "YOU ARE HEATING UP"}
                     </span>
                     <span className="text-2xl sm:text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
                   </div>
@@ -806,75 +791,90 @@ export default function App() {
 
             {/* UI Overlay */}
             <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
-              <div className="flex flex-col gap-1">
-                <div className={`flex items-center gap-2 ${theme.textColor} font-bold text-2xl tracking-tight`}>
-                  <Flag className="w-6 h-6" />
-                  <span>Hole {gameState.level}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className={`${theme.textColor} opacity-70 font-medium`}>
-                    Total Sunk: <span className="opacity-100 font-bold">{gameState.totalScore}</span>
-                  </div>
-                  <div className={`${theme.textColor} opacity-70 font-medium`}>
-                    Goal: <span className="opacity-100 font-bold">{streakGoal}</span>
-                  </div>
-                  {gameState.streak > 1 && (
-                    <div className="bg-orange-500 px-3 py-0.5 rounded-full text-xs font-black text-white animate-pulse uppercase tracking-wider">
-                      {gameState.streak}x Streak
-                    </div>
-                  )}
+              <div className="flex flex-col gap-1 pointer-events-auto">
+                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 shadow-xl">
+                  <Trophy className={`w-4 h-4 ${gameState.streak >= 7 ? 'text-orange-400 animate-pulse' : 'text-yellow-400'}`} />
+                  <span className="text-white font-black uppercase tracking-widest text-xs sm:text-sm">Streak: {gameState.streak}/{streakGoal}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pointer-events-auto">
+              <div className="flex items-center gap-2 pointer-events-auto relative">
                 <button
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 border border-white/10"
-                  title={isMuted ? "Unmute" : "Mute"}
+                  onClick={() => setShowGoalSelector(!showGoalSelector)}
+                  className={`p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 border border-white/10 shadow-xl ${showGoalSelector ? 'bg-white/20 rotate-90' : ''}`}
+                  title="Settings"
                 >
-                  {isMuted ? <Music className="w-4 h-4 opacity-50" /> : <Music className="w-4 h-4" />}
+                  <Settings className="w-5 h-5" />
                 </button>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowGoalSelector(!showGoalSelector)}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 flex items-center gap-2 border border-white/10"
-                    title="Set Streak Goal"
-                  >
-                    <Trophy className={`w-4 h-4 ${streakGoal >= 7 ? 'text-yellow-400' : 'text-slate-300'}`} />
-                    <span className="text-xs font-black uppercase tracking-widest">Goal: {streakGoal}</span>
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showGoalSelector && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute top-full right-0 mt-2 p-4 bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl z-[110] w-48"
-                      >
+                
+                <AnimatePresence>
+                  {showGoalSelector && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full right-0 mt-3 p-5 bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[110] w-64"
+                    >
+                      <div className="flex flex-col gap-6">
+                        {/* Audio Toggle */}
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Preferences</span>
+                          <button
+                            onClick={() => setIsMuted(!isMuted)}
+                            className="flex items-center justify-between w-full px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-colors border border-white/5 group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${isMuted ? 'bg-slate-800 text-white/40' : 'bg-blue-500/20 text-blue-400'}`}>
+                                {isMuted ? <Music className="w-4 h-4" /> : <Music className="w-4 h-4" />}
+                              </div>
+                              <span className="text-sm font-bold text-white/90">{isMuted ? 'Audio Muted' : 'Audio On'}</span>
+                            </div>
+                            <div className={`w-10 h-5 rounded-full relative transition-colors ${isMuted ? 'bg-slate-700' : 'bg-blue-500'}`}>
+                              <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isMuted ? 'left-1' : 'left-6'}`} />
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* Goal Selector */}
                         <div className="flex flex-col gap-3">
                           <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Streak Goal</span>
-                            <span className="text-sm font-bold text-yellow-400">{streakGoal}</span>
+                            <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Streak Goal</span>
+                            <div className="bg-yellow-400/20 px-2 py-0.5 rounded-md">
+                              <span className="text-xs font-black text-yellow-400">{streakGoal}</span>
+                            </div>
                           </div>
-                          <input
-                            type="range"
-                            min="2"
-                            max="10"
-                            step="1"
-                            value={streakGoal}
-                            onChange={(e) => setStreakGoal(parseInt(e.target.value))}
-                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-400"
-                          />
-                          <div className="flex justify-between text-[8px] font-bold text-white/30 uppercase">
-                            <span>2</span>
-                            <span>10</span>
+                          <div className="px-1">
+                            <input
+                              type="range"
+                              min="2"
+                              max="10"
+                              step="1"
+                              value={streakGoal}
+                              onChange={(e) => setStreakGoal(parseInt(e.target.value))}
+                              className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                            />
+                            <div className="flex justify-between mt-2 text-[8px] font-bold text-white/20 uppercase tracking-widest">
+                              <span>2</span>
+                              <span>10</span>
+                            </div>
                           </div>
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+
+                        {/* Stats Summary */}
+                        <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Total Sunk</span>
+                            <span className="text-lg font-black text-white leading-none">{gameState.totalScore}</span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Hole</span>
+                            <span className="text-lg font-black text-white leading-none">{gameState.level}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -945,7 +945,7 @@ export default function App() {
                       ease: "linear",
                       delay: i * 0.2 
                     }}
-                    className="text-6xl"
+                    className="text-4xl sm:text-6xl"
                   >
                     🐐
                   </motion.span>
@@ -969,17 +969,17 @@ export default function App() {
                       ease: "easeInOut",
                       delay: i * 0.1 
                     }}
-                    className="text-5xl sm:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
+                    className="text-4xl sm:text-6xl md:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
                   >
                     {streakGoal === 10 ? '👑🐐' : '🐐'}
                   </motion.span>
                 ))}
               </div>
               
-              <h1 className="text-5xl sm:text-9xl font-black italic uppercase tracking-tighter mb-1 sm:mb-2 drop-shadow-2xl leading-none">
+              <h1 className="text-4xl sm:text-7xl md:text-9xl font-black italic uppercase tracking-tighter mb-1 sm:mb-2 drop-shadow-2xl leading-none">
                 {streakGoal === 10 ? 'ULTIMATE' : 'YOU ARE'}
               </h1>
-              <h1 className="text-5xl sm:text-9xl font-black italic uppercase tracking-tighter mb-2 sm:mb-4 drop-shadow-2xl leading-none">
+              <h1 className="text-4xl sm:text-7xl md:text-9xl font-black italic uppercase tracking-tighter mb-2 sm:mb-4 drop-shadow-2xl leading-none">
                 {streakGoal === 10 ? 'GOAT' : 'THE GOAT'}
               </h1>
               
@@ -998,7 +998,7 @@ export default function App() {
                       ease: "easeInOut",
                       delay: (i + 3) * 0.1 
                     }}
-                    className="text-5xl sm:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
+                    className="text-4xl sm:text-6xl md:text-8xl drop-shadow-[0_15px_15px_rgba(0,0,0,0.4)]"
                   >
                     {streakGoal === 10 ? '👑🐐' : '🐐'}
                   </motion.span>
