@@ -56,6 +56,7 @@ interface GameState {
   level: number;
   totalScore: number;
   streak: number;
+  consecutiveMisses: number;
   trail: Point[];
 }
 
@@ -78,17 +79,20 @@ export default function App() {
     level: 1,
     totalScore: 0,
     streak: 0,
+    consecutiveMisses: 0,
     trail: [],
   });
 
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [tick, setTick] = useState(0);
   const [showToast, setShowToast] = useState(false);
+  const [showMissToast, setShowMissToast] = useState(false);
   const [hasShotOnce, setHasShotOnce] = useState(false);
   const [streakGoal, setStreakGoal] = useState(10);
   const [showGoalSelector, setShowGoalSelector] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const noisePatternRef = useRef<CanvasPattern | null>(null);
+  const grassPatternRef = useRef<CanvasPattern | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const theme = THEME;
@@ -154,70 +158,77 @@ export default function App() {
   const playSound = useCallback((type: 'hit' | 'sink' | 'win' | 'pop') => {
     if (isMuted) return;
     
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      
+      // If still suspended after resume attempt, browser is blocking it
+      if (ctx.state === 'suspended') return;
 
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.15, ctx.currentTime);
-    masterGain.connect(ctx.destination);
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.15, ctx.currentTime);
+      masterGain.connect(ctx.destination);
 
-    if (type === 'hit') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(150, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.5, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-      osc.connect(gain);
-      gain.connect(masterGain);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.1);
-    } else if (type === 'sink') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(200, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
-      gain.gain.setValueAtTime(0.8, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      osc.connect(gain);
-      gain.connect(masterGain);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-    } else if (type === 'win') {
-      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
-      notes.forEach((freq, i) => {
+      if (type === 'hit') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
-        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1);
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.1 + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.4);
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.5, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
         osc.connect(gain);
         gain.connect(masterGain);
-        osc.start(ctx.currentTime + i * 0.1);
-        osc.stop(ctx.currentTime + i * 0.1 + 0.5);
-      });
-    } else if (type === 'pop') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-      osc.connect(gain);
-      gain.connect(masterGain);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.05);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } else if (type === 'sink') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.8, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } else if (type === 'win') {
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+          gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1);
+          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.1 + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.4);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(ctx.currentTime + i * 0.1);
+          osc.stop(ctx.currentTime + i * 0.1 + 0.5);
+        });
+      } else if (type === 'pop') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.05);
+      }
+    } catch (e) {
+      console.warn('Audio playback failed:', e);
     }
   }, [isMuted]);
 
@@ -231,6 +242,17 @@ export default function App() {
       setShowToast(false);
     }
   }, [gameState.streak]);
+
+  // Toast trigger for misses
+  useEffect(() => {
+    if (gameState.consecutiveMisses === 3) {
+      setShowMissToast(true);
+      const timer = setTimeout(() => setShowMissToast(false), 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowMissToast(false);
+    }
+  }, [gameState.consecutiveMisses]);
 
   // Animation tick for fire effect
   useEffect(() => {
@@ -305,6 +327,7 @@ export default function App() {
       strokes: 0,
       streak: 0,
       totalScore: 0,
+      consecutiveMisses: 0,
       trail: [],
     });
   }, [dimensions]);
@@ -357,6 +380,20 @@ export default function App() {
           gravity: 1.2,
           scalar: isUltimate ? 1.5 : 1.2,
         });
+        // Top spray (downward)
+        if (isUltimate) {
+          confetti({
+            particleCount: 5,
+            angle: 270, // Downward
+            spread: 180,
+            origin: { x: Math.random(), y: -0.1 }, // Random x at top
+            colors: ['#FFD700', '#FFA500', '#FFFFFF'],
+            ticks: 200,
+            gravity: 1.5,
+            scalar: 2,
+            startVelocity: 30,
+          });
+        }
       }, 100);
       return () => clearInterval(interval);
     }
@@ -455,6 +492,7 @@ export default function App() {
               isGameWon: isWin,
               totalScore: prev.totalScore + 1,
               streak: newStreak,
+              consecutiveMisses: 0,
             };
           }
         }
@@ -467,6 +505,7 @@ export default function App() {
             ballPos: { x, y },
             ballVel: { x: 0, y: 0 },
             isMoving: false,
+            consecutiveMisses: prev.consecutiveMisses + 1,
           };
         }
 
@@ -561,6 +600,42 @@ export default function App() {
       ctx.fillRect(0, 0, dimensions.width, dimensions.height);
     }
 
+    // Draw Subtle Repeating Grass Texture
+    if (!grassPatternRef.current) {
+      const grassCanvas = document.createElement('canvas');
+      grassCanvas.width = 64;
+      grassCanvas.height = 64;
+      const grassCtx = grassCanvas.getContext('2d');
+      if (grassCtx) {
+        grassCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+        grassCtx.lineWidth = 1;
+        // Draw some subtle diagonal lines for a "mown" look
+        grassCtx.beginPath();
+        grassCtx.moveTo(0, 0);
+        grassCtx.lineTo(64, 64);
+        grassCtx.stroke();
+        
+        grassCtx.strokeStyle = 'rgba(0, 0, 0, 0.02)';
+        grassCtx.beginPath();
+        grassCtx.moveTo(64, 0);
+        grassCtx.lineTo(0, 64);
+        grassCtx.stroke();
+        
+        // Add some tiny dots
+        grassCtx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        for(let i=0; i<5; i++) {
+          grassCtx.fillRect(Math.random()*64, Math.random()*64, 1, 1);
+        }
+        
+        grassPatternRef.current = ctx.createPattern(grassCanvas, 'repeat');
+      }
+    }
+
+    if (grassPatternRef.current) {
+      ctx.fillStyle = grassPatternRef.current;
+      ctx.fillRect(0, 0, dimensions.width, dimensions.height);
+    }
+
     // Draw Grass Texture
     ctx.fillStyle = theme.textureColor;
     for (let i = 0; i < 1000; i++) {
@@ -620,34 +695,59 @@ export default function App() {
 
       // Glow effect
       ctx.save();
-      ctx.shadowBlur = 15 * physics.visualScale;
-      ctx.shadowColor = theme.ballColor;
+      ctx.shadowBlur = 20 * physics.visualScale;
+      ctx.shadowColor = gameState.streak > 3 ? '#ff4400' : (gameState.streak > 0 ? '#00ccff' : 'rgba(255, 255, 255, 0.5)');
       
-      ctx.beginPath();
-      ctx.moveTo(gameState.trail[0].x, gameState.trail[0].y);
-      for (let i = 1; i < gameState.trail.length; i++) {
-        ctx.lineTo(gameState.trail[i].x, gameState.trail[i].y);
+      // Draw a "comet" style trail with multiple layers
+      for (let layer = 0; layer < 2; layer++) {
+        ctx.beginPath();
+        ctx.moveTo(gameState.trail[0].x, gameState.trail[0].y);
+        for (let i = 1; i < gameState.trail.length; i++) {
+          ctx.lineTo(gameState.trail[i].x, gameState.trail[i].y);
+        }
+        ctx.strokeStyle = layer === 0 ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = baseWidth * (layer === 0 ? 1.5 : 2.5);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
       }
-      ctx.strokeStyle = theme.ballColor + '22';
-      ctx.lineWidth = baseWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
       ctx.restore();
 
-      // Tapered and Fading segments
+      // Tapered and Fading segments with color shift
       for (let i = 0; i < gameState.trail.length - 1; i++) {
         const progress = i / gameState.trail.length;
-        const alpha = progress * 0.6;
+        const alpha = progress * 0.8;
         const width = baseWidth * progress;
         
         ctx.beginPath();
         ctx.moveTo(gameState.trail[i].x, gameState.trail[i].y);
         ctx.lineTo(gameState.trail[i + 1].x, gameState.trail[i + 1].y);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        
+        // Color shift based on streak
+        let color = `rgba(255, 255, 255, ${alpha})`;
+        if (gameState.streak > 5) {
+          color = `rgba(255, 100, 0, ${alpha})`;
+        } else if (gameState.streak > 2) {
+          color = `rgba(0, 200, 255, ${alpha})`;
+        }
+        
+        ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.lineCap = 'round';
         ctx.stroke();
+
+        // Random sparkles on the trail if moving fast
+        if (speed > 5 && Math.random() > 0.8) {
+          ctx.fillStyle = 'white';
+          ctx.beginPath();
+          ctx.arc(
+            gameState.trail[i].x + (Math.random() - 0.5) * 10,
+            gameState.trail[i].y + (Math.random() - 0.5) * 10,
+            Math.random() * 2,
+            0, Math.PI * 2
+          );
+          ctx.fill();
+        }
       }
     }
 
@@ -680,13 +780,67 @@ export default function App() {
         }
       }
 
+      // Draw Ball Body with 3D Shading
+      const ballGradient = ctx.createRadialGradient(
+        gameState.ballPos.x - physics.ballRadius * 0.3,
+        gameState.ballPos.y - physics.ballRadius * 0.3,
+        physics.ballRadius * 0.1,
+        gameState.ballPos.x,
+        gameState.ballPos.y,
+        physics.ballRadius
+      );
+      ballGradient.addColorStop(0, '#ffffff');
+      ballGradient.addColorStop(0.7, '#f0f0f0');
+      ballGradient.addColorStop(1, '#cccccc');
+
+      // Pulse effect for high streaks
+      if (gameState.streak >= 3) {
+        const pulse = Math.sin(tick * 0.1) * 0.2 + 1.1;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(gameState.ballPos.x, gameState.ballPos.y, physics.ballRadius * pulse, 0, Math.PI * 2);
+        ctx.fillStyle = gameState.streak >= 7 ? 'rgba(255, 60, 0, 0.3)' : 'rgba(0, 200, 255, 0.3)';
+        ctx.fill();
+        ctx.restore();
+      }
+
       ctx.beginPath();
       ctx.arc(gameState.ballPos.x, gameState.ballPos.y, physics.ballRadius, 0, Math.PI * 2);
-      ctx.fillStyle = theme.ballColor;
-      ctx.shadowBlur = 5 * physics.visualScale;
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.fillStyle = ballGradient;
+      ctx.shadowBlur = 8 * physics.visualScale;
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
       ctx.fill();
       ctx.shadowBlur = 0;
+
+      // Draw Dimples
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+      const dimpleCount = 6;
+      for (let i = 0; i < dimpleCount; i++) {
+        const angle = (i / dimpleCount) * Math.PI * 2 + (tick * 0.02);
+        const dist = physics.ballRadius * 0.5;
+        const dx = Math.cos(angle) * dist;
+        const dy = Math.sin(angle) * dist;
+        
+        ctx.beginPath();
+        ctx.arc(gameState.ballPos.x + dx, gameState.ballPos.y + dy, physics.ballRadius * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Center dimple
+      ctx.beginPath();
+      ctx.arc(gameState.ballPos.x, gameState.ballPos.y, physics.ballRadius * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle Highlight
+      ctx.beginPath();
+      ctx.arc(
+        gameState.ballPos.x - physics.ballRadius * 0.4,
+        gameState.ballPos.y - physics.ballRadius * 0.4,
+        physics.ballRadius * 0.2,
+        0, Math.PI * 2
+      );
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fill();
     }
 
     ctx.restore();
@@ -759,7 +913,7 @@ export default function App() {
 
   const resetGame = () => {
     initLevel(1, dimensions.width, dimensions.height, 0);
-    setGameState(prev => ({ ...prev, totalScore: 0 }));
+    setGameState(prev => ({ ...prev, totalScore: 0, consecutiveMisses: 0 }));
   };
 
   const nextLevel = () => {
@@ -798,6 +952,23 @@ export default function App() {
                       {gameState.streak >= 7 ? "YOU ARE ON FIRE" : "YOU ARE HEATING UP"}
                     </span>
                     <span className="text-2xl sm:text-4xl">{gameState.streak >= 7 ? '🚨' : '⛳'}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {showMissToast && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5, y: 50 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.5, y: -50 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none w-full flex justify-center px-4"
+                >
+                  <div className="bg-slate-800 text-white px-4 py-2 sm:px-8 sm:py-4 rounded-xl sm:rounded-2xl shadow-2xl border-2 sm:border-4 border-blue-400 flex items-center gap-2 sm:gap-4 whitespace-nowrap">
+                    <span className="text-2xl sm:text-4xl">😤</span>
+                    <span className="text-xl sm:text-3xl font-black uppercase italic tracking-tighter">
+                      LOCK-IN BRO!
+                    </span>
+                    <span className="text-2xl sm:text-4xl">🎯</span>
                   </div>
                 </motion.div>
               )}
@@ -947,19 +1118,22 @@ export default function App() {
           >
             {/* Top Goat Train (Right to Left) - ONLY FOR ULTIMATE WIN */}
             {streakGoal === 10 && (
-              <div className="absolute top-10 left-0 w-full overflow-hidden pointer-events-none flex flex-row-reverse gap-8">
+              <div className="absolute top-10 left-0 w-full h-20 overflow-hidden pointer-events-none">
                 {[...Array(15)].map((_, i) => (
                   <motion.span
                     key={`goat-train-top-${i}`}
-                    initial={{ x: '100vw' }}
-                    animate={{ x: '-100vw' }}
-                    transition={{ 
-                      duration: 6, 
-                      repeat: Infinity, 
-                      ease: "linear",
-                      delay: i * 0.5 
+                    initial={{ x: '120vw', rotate: 0, scaleX: 1 }}
+                    animate={{ 
+                      x: '-20vw',
+                      rotate: 360,
+                      y: [0, -20, 0, -20, 0]
                     }}
-                    className="text-4xl sm:text-6xl"
+                    transition={{ 
+                      x: { duration: 5, repeat: Infinity, ease: "linear", delay: i * 0.4 },
+                      rotate: { duration: 1, repeat: Infinity, ease: "linear", delay: i * 0.4 },
+                      y: { duration: 0.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }
+                    }}
+                    className="text-4xl sm:text-6xl absolute top-0"
                   >
                     🐐
                   </motion.span>
@@ -969,19 +1143,22 @@ export default function App() {
 
             {/* Bottom Goat Train (Left to Right) - ONLY FOR ULTIMATE WIN */}
             {streakGoal === 10 && (
-              <div className="absolute bottom-10 left-0 w-full overflow-hidden pointer-events-none flex gap-8">
+              <div className="absolute bottom-10 left-0 w-full h-20 overflow-hidden pointer-events-none">
                 {[...Array(15)].map((_, i) => (
                   <motion.span
                     key={`goat-train-bottom-${i}`}
-                    initial={{ x: '-100vw' }}
-                    animate={{ x: '100vw' }}
-                    transition={{ 
-                      duration: 6, 
-                      repeat: Infinity, 
-                      ease: "linear",
-                      delay: i * 0.5 
+                    initial={{ x: '-20vw', rotate: 0, scaleX: -1 }}
+                    animate={{ 
+                      x: '120vw',
+                      rotate: -360,
+                      y: [0, -20, 0, -20, 0]
                     }}
-                    className="text-4xl sm:text-6xl"
+                    transition={{ 
+                      x: { duration: 5, repeat: Infinity, ease: "linear", delay: i * 0.4 },
+                      rotate: { duration: 1, repeat: Infinity, ease: "linear", delay: i * 0.4 },
+                      y: { duration: 0.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }
+                    }}
+                    className="text-4xl sm:text-6xl absolute top-0"
                   >
                     🐐
                   </motion.span>
@@ -1013,7 +1190,7 @@ export default function App() {
               </div>
               
               <h1 className="text-4xl sm:text-7xl md:text-9xl font-black italic uppercase tracking-tighter mb-1 sm:mb-2 drop-shadow-2xl leading-none">
-                {streakGoal === 10 ? 'ULTIMATE' : 'YOU ARE'}
+                {streakGoal === 10 ? 'ULTIMATE' : 'UR'}
               </h1>
               <h1 className="text-4xl sm:text-7xl md:text-9xl font-black italic uppercase tracking-tighter mb-2 sm:mb-4 drop-shadow-2xl leading-none">
                 {streakGoal === 10 ? 'GOAT' : 'THE GOAT'}
