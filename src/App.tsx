@@ -56,6 +56,7 @@ interface GameState {
   level: number;
   totalScore: number;
   streak: number;
+  bestStreak: number;
   consecutiveMisses: number;
   trail: Point[];
 }
@@ -79,6 +80,7 @@ export default function App() {
     level: 1,
     totalScore: 0,
     streak: 0,
+    bestStreak: 0,
     consecutiveMisses: 0,
     trail: [],
   });
@@ -312,24 +314,25 @@ export default function App() {
 
     if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
 
-    setGameState({
-      ballPos: { x: ballX, y: ballY },
-      ballVel: { x: 0, y: 0 },
-      holePos: { x: holeX, y: holeY },
-      isMoving: false,
-      isDragging: false,
-      dragStart: null,
-      dragCurrent: null,
-      gameOver: false,
-      isResetting: false,
-      isGameWon: false,
-      level: 1,
-      strokes: 0,
-      streak: 0,
-      totalScore: 0,
-      consecutiveMisses: 0,
-      trail: [],
-    });
+      setGameState(prev => ({
+        ...prev,
+        ballPos: { x: ballX, y: ballY },
+        ballVel: { x: 0, y: 0 },
+        holePos: { x: holeX, y: holeY },
+        isMoving: false,
+        isDragging: false,
+        dragStart: null,
+        dragCurrent: null,
+        gameOver: false,
+        isResetting: false,
+        isGameWon: false,
+        level: 1,
+        strokes: 0,
+        streak: 0,
+        totalScore: 0,
+        consecutiveMisses: 0,
+        trail: [],
+      }));
   }, [dimensions]);
 
   // Handle Resize
@@ -492,6 +495,7 @@ export default function App() {
               isGameWon: isWin,
               totalScore: prev.totalScore + 1,
               streak: newStreak,
+              bestStreak: Math.max(prev.bestStreak, newStreak),
               consecutiveMisses: 0,
             };
           }
@@ -977,7 +981,7 @@ export default function App() {
             {/* UI Overlay */}
             <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
               <div className="flex flex-col gap-1 pointer-events-auto">
-                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 shadow-xl">
+                <div className="bg-[#1e3c1a]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 shadow-xl">
                   <Trophy className={`w-4 h-4 ${gameState.streak >= 7 ? 'text-orange-400 animate-pulse' : 'text-yellow-400'}`} />
                   <span className="text-white font-black uppercase tracking-widest text-xs sm:text-sm">Streak: {gameState.streak}/{streakGoal}</span>
                 </div>
@@ -986,7 +990,7 @@ export default function App() {
               <div className="flex items-center gap-2 pointer-events-auto relative">
                 <button
                   onClick={() => setShowGoalSelector(!showGoalSelector)}
-                  className={`p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 border border-white/10 shadow-xl ${showGoalSelector ? 'bg-white/20 rotate-90' : ''}`}
+                  className={`p-2 bg-[#1e3c1a]/95 hover:bg-[#1e3c1a] backdrop-blur-md rounded-full text-white transition-all active:scale-95 border border-white/10 shadow-xl ${showGoalSelector ? 'rotate-90' : ''}`}
                   title="Settings"
                 >
                   <Settings className="w-5 h-5" />
@@ -998,26 +1002,41 @@ export default function App() {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute top-full right-0 mt-3 p-5 bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[110] w-64"
+                      className="absolute top-full right-0 mt-3 p-5 bg-[#1e3c1a]/95 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[110] w-64"
                     >
                       <div className="flex flex-col gap-6">
                         {/* Audio Toggle */}
                         <div className="flex flex-col gap-2">
                           <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Preferences</span>
-                          <button
-                            onClick={() => setIsMuted(!isMuted)}
-                            className="flex items-center justify-between w-full px-4 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-colors border border-white/5 group"
-                          >
+                          <div className="flex items-center justify-between w-full px-4 py-2 bg-white/5 rounded-2xl border border-white/5">
                             <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${isMuted ? 'bg-slate-800 text-white/40' : 'bg-blue-500/20 text-blue-400'}`}>
-                                {isMuted ? <Music className="w-4 h-4" /> : <Music className="w-4 h-4" />}
+                              <div className={`p-2 rounded-lg ${isMuted ? 'bg-[#152b12] text-white/40' : 'bg-[#2d5a27] text-white'}`}>
+                                <Music className="w-4 h-4" />
                               </div>
-                              <span className="text-sm font-bold text-white/90">{isMuted ? 'Audio Muted' : 'Audio On'}</span>
+                              <span className="text-sm font-bold text-white/90">Audio</span>
                             </div>
-                            <div className={`w-10 h-5 rounded-full relative transition-colors ${isMuted ? 'bg-slate-700' : 'bg-blue-500'}`}>
-                              <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isMuted ? 'left-1' : 'left-6'}`} />
-                            </div>
-                          </button>
+                            <button
+                              onClick={() => setIsMuted(!isMuted)}
+                              className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all active:scale-90 border-2 ${
+                                !isMuted 
+                                  ? 'bg-[#2d5a27] border-[#3a7332] text-white' 
+                                  : 'bg-[#152b12] border-[#1e3c1a] text-white/20'
+                              }`}
+                              aria-label={isMuted ? "Unmute" : "Mute"}
+                            >
+                              {!isMuted ? (
+                                <motion.div
+                                  initial={{ scale: 0.5, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  className="font-black text-lg"
+                                >
+                                  ✓
+                                </motion.div>
+                              ) : (
+                                <div className="w-4 h-4 rounded-sm border-2 border-white/10" />
+                              )}
+                            </button>
+                          </div>
                         </div>
 
                         {/* Goal Selector */}
@@ -1052,8 +1071,8 @@ export default function App() {
                             <span className="text-lg font-black text-white leading-none">{gameState.totalScore}</span>
                           </div>
                           <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Hole</span>
-                            <span className="text-lg font-black text-white leading-none">{gameState.level}</span>
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Best Streak</span>
+                            <span className="text-lg font-black text-white leading-none">{gameState.bestStreak}</span>
                           </div>
                         </div>
                       </div>
@@ -1071,7 +1090,7 @@ export default function App() {
                 exit={{ opacity: 0, y: 20 }}
                 className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 pointer-events-none w-max max-w-[90vw]"
               >
-                <div className="bg-black/40 backdrop-blur-md px-4 py-2 sm:px-6 sm:py-3 rounded-full flex items-center gap-2 sm:gap-3 text-white/90 border border-white/10">
+                <div className="bg-[#1e3c1a]/90 backdrop-blur-md px-4 py-2 sm:px-6 sm:py-3 rounded-full flex items-center gap-2 sm:gap-3 text-white/90 border border-white/10 shadow-2xl">
                   <Info className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span className="text-xs sm:text-sm font-medium">One shot only! Pull back to aim</span>
                 </div>
