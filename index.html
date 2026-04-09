@@ -8,6 +8,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.goatcounter = {
+        path: function (p) {
+          const base = "/" + location.host;
+          return p === "/" ? base : base + p;
+        },
+      };
+    </script>
     <script data-goatcounter="https://cdb.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
