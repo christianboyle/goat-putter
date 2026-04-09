@@ -157,6 +157,20 @@ export default function App() {
   }, []);
 
   // Audio Synthesis
+  const unlockAudioContext = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+    } catch {
+      // Ignore — playSound will retry
+    }
+  }, []);
+
   const playSound = useCallback((type: 'hit' | 'sink' | 'win' | 'pop') => {
     if (isMuted) return;
     
@@ -941,6 +955,18 @@ export default function App() {
           className="block w-full h-full cursor-crosshair"
         />
 
+            {showGoalSelector && (
+              <div
+                className="fixed inset-0 z-[105] touch-none bg-transparent"
+                aria-hidden
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowGoalSelector(false);
+                }}
+              />
+            )}
+
             {/* Toast Notification */}
             <AnimatePresence>
               {showToast && (
@@ -978,8 +1004,8 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            {/* UI Overlay */}
-            <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none">
+            {/* UI Overlay — z above settings backdrop so streak / chrome stay interactive */}
+            <div className="absolute top-0 left-0 z-[115] w-full p-6 flex justify-between items-start pointer-events-none">
               <div className="flex flex-col gap-1 pointer-events-auto">
                 <div className="bg-[#1e3c1a]/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 shadow-xl">
                   <Trophy className={`w-4 h-4 ${gameState.streak >= 7 ? 'text-orange-400 animate-pulse' : 'text-yellow-400'}`} />
@@ -1016,7 +1042,13 @@ export default function App() {
                               <span className="text-sm font-bold text-white/90">Audio</span>
                             </div>
                             <button
-                              onClick={() => setIsMuted(!isMuted)}
+                              onClick={() => {
+                                const nextMuted = !isMuted;
+                                setIsMuted(nextMuted);
+                                if (!nextMuted) {
+                                  unlockAudioContext();
+                                }
+                              }}
                               className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all active:scale-90 border-2 ${
                                 !isMuted 
                                   ? 'bg-[#2d5a27] border-[#3a7332] text-white' 
